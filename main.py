@@ -34,6 +34,7 @@ class TabuSearchTSP:
     def __init__(
         self,
         coords,
+        initial_solution,
         tabu_size=50,  # 禁忌表大小
         max_iter=2000,  # 最大迭代次数
         neighbor_size=100,  # 邻域大小
@@ -43,6 +44,7 @@ class TabuSearchTSP:
     ):
         """初始化禁忌搜索参数"""
         self.coords = coords
+        self.initial_solution = initial_solution
         self.num_cities = len(coords)
         self.tabu_size = tabu_size
         self.max_iter = max_iter
@@ -75,38 +77,6 @@ class TabuSearchTSP:
         for i in range(n):
             total += self.distance_matrix[route[i]][route[(i + 1) % n]]
         return total
-
-    def generate_initial_solution(self):
-        """使用最近邻启发式生成初始解"""
-        best_route = None
-        best_dist = float("inf")
-
-        # 从5个不同的起点尝试，选择最好的一个
-        for _ in range(5):
-            start = random.randint(0, self.num_cities - 1)
-            route = [start]
-            unvisited = set(range(self.num_cities))
-            unvisited.remove(start)
-
-            while unvisited:
-                last = route[-1]
-                # 从预计算的列表中获取未访问的最近城市
-                candidates = [n for n in self.nearest_neighbors[last] if n in unvisited]
-                if not candidates:  # 如果没有候选城市，从剩余未访问城市中选择
-                    candidates = list(unvisited)
-
-                # 选择距离最近的城市
-                next_city = min(candidates, key=lambda x: self.distance_matrix[last, x])
-                route.append(next_city)
-                unvisited.remove(next_city)
-
-            # 评估当前路径
-            dist = self.calculate_distance(route)
-            if dist < best_dist:
-                best_dist = dist
-                best_route = route
-
-        return best_route
 
     def get_neighbors(self, route):
         """使用2-opt移动生成邻域解"""
@@ -177,15 +147,15 @@ class TabuSearchTSP:
 
     def solve(self):
         """主禁忌搜索算法"""
-        # 生成初始解
-        current_route = self.generate_initial_solution()
+        # 初始解
+        current_route = self.initial_solution
         current_dist = self.calculate_distance(current_route)
         best_route = current_route.copy()  # type: ignore
         best_dist = current_dist
 
         # 用于跟踪进度
         last_improvement = 0
-        history = []
+        history = [best_dist]
 
         for iteration in range(self.max_iter):
             # 检查停滞情况
@@ -259,6 +229,7 @@ class SimulatedAnnealingTSP:
     def __init__(
         self,
         coords,
+        initial_solution,
         initial_temp=10000,  # 初始温度
         cooling_rate=0.003,  # 冷却速率
         max_iter=2000,  # 最大迭代次数
@@ -266,6 +237,7 @@ class SimulatedAnnealingTSP:
     ):
         """初始化模拟退火参数"""
         self.coords = coords
+        self.initial_solution = initial_solution
         self.num_cities = len(coords)
         self.initial_temp = initial_temp
         self.cooling_rate = cooling_rate
@@ -311,8 +283,8 @@ class SimulatedAnnealingTSP:
 
     def solve(self):
         """主模拟退火算法"""
-        # 生成初始解
-        current_route = self.generate_initial_solution()
+        # 初始解
+        current_route = self.initial_solution
         current_dist = self.calculate_distance(current_route)
         best_route = current_route.copy()
         best_dist = current_dist
@@ -321,7 +293,7 @@ class SimulatedAnnealingTSP:
         temp = self.initial_temp
 
         # 用于跟踪进度
-        history = []
+        history = [best_dist]
 
         for iteration in range(self.max_iter):
             # 生成邻域解
@@ -421,7 +393,6 @@ def plot_route(coords, route, title="TSP Route", save_path="tsp_route.png"):
     plt.savefig(save_path, dpi=300)  # 提高DPI使文字更清晰
     plt.close()
 
-
 def calculate_route_distance(coords, route):
     """计算TSP路径的总距离"""
     route_coords = coords[np.array(route)]
@@ -429,6 +400,51 @@ def calculate_route_distance(coords, route):
     dy = np.diff(np.append(route_coords[:, 1], route_coords[0, 1]))
     return np.sum(np.sqrt(dx**2 + dy**2))
 
+def generate_initial_solution(coords):
+    """生成随机初始解"""
+    route = list(range(len(coords)))
+    random.shuffle(route)
+    return route
+
+def generate_initial_solution_NN(coords):
+    """使用最近邻启发式生成初始解"""
+    best_route = None
+    best_dist = float("inf")
+    num_cities = len(coords)
+
+    # 从5个不同的起点尝试，选择最好的一个
+    for _ in range(5):
+        start = random.randint(0, num_cities - 1)
+        route = [start]
+        unvisited = set(range(num_cities))
+        unvisited.remove(start)
+
+        # 预计算距离矩阵
+        x = coords[:, 0]
+        y = coords[:, 1]
+        distance_matrix = np.sqrt(
+            (x[:, np.newaxis] - x) ** 2 + (y[:, np.newaxis] - y) ** 2
+        )
+
+        while unvisited:
+            last = route[-1]
+            # 从预计算的列表中获取未访问的最近城市
+            candidates = [n for n in unvisited]
+            if not candidates:  # 如果没有候选城市，从剩余未访问城市中选择
+                candidates = list(unvisited)
+
+            # 选择距离最近的城市
+            next_city = min(candidates, key=lambda x: distance_matrix[last, x])
+            route.append(next_city)
+            unvisited.remove(next_city)
+
+        # 评估当前路径
+        dist = calculate_route_distance(coords, route)
+        if dist < best_dist:
+            best_dist = dist
+            best_route = route
+
+    return best_route
 
 def plot_convergence(history, title="Convergence History", save_path="convergence.png"):
     """绘制收敛历史图并保存为文件"""
@@ -465,14 +481,6 @@ def verify_route(coords, route):
         print("错误: 某些城市缺失或重复!")
         return False
 
-    # 验证距离计算一致性
-    dist1 = calculate_route_distance(coords, route)
-    dist2 = TabuSearchTSP(coords).calculate_distance(route)
-
-    if not np.isclose(dist1, dist2):
-        print(f"距离计算不匹配: {dist1} vs {dist2}")
-        return False
-
     return True
 
 
@@ -490,11 +498,19 @@ def main():
     random.seed(seed)
     np.random.seed(seed)
 
+    # 生成初始解
+    initial_solution = generate_initial_solution_NN(coords)
+
+    # 重置种子
+    random.seed(seed)
+    np.random.seed(seed)
+
     # 运行禁忌搜索
     print("\n=== 运行禁忌搜索算法 ===")
     ts_start = datetime.now()
     ts_tsp = TabuSearchTSP(
         coords,
+        initial_solution,
         tabu_size=250,
         max_iter=5000,
         neighbor_size=300,
@@ -505,11 +521,15 @@ def main():
     ts_route, ts_dist, ts_history = ts_tsp.solve()
     ts_end = datetime.now()
 
+    # 重置种子
+    random.seed(seed)
+    np.random.seed(seed)
+
     # 运行模拟退火
     print("\n=== 运行模拟退火算法 ===")
     sa_start = datetime.now()
     sa_tsp = SimulatedAnnealingTSP(
-        coords, initial_temp=10000, cooling_rate=0.003, max_iter=5000, k_nearest=10
+        coords, initial_solution, initial_temp=1, cooling_rate=0.003, max_iter=5000, k_nearest=10
     )
     sa_route, sa_dist, sa_history = sa_tsp.solve()
     sa_end = datetime.now()
@@ -521,6 +541,7 @@ def main():
 
     # 结果对比
     print("\n=== 算法性能对比 ===")
+    print(f"初始种子: {seed}")
     print(f"禁忌搜索 - 最佳距离: {ts_dist:.2f}, 耗时: {ts_end - ts_start}")
     print(f"模拟退火 - 最佳距离: {sa_dist:.2f}, 耗时: {sa_end - sa_start}")
     print(f"与最优解(426)的差距:")
