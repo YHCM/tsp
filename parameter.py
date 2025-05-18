@@ -2,10 +2,11 @@ import os
 import random
 from collections import defaultdict
 from datetime import datetime
-from main import read_tsp_file, generate_initial_solution
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from main import generate_initial_solution, read_tsp_file
 
 
 class TabuSearchTSP:

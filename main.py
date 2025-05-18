@@ -27,29 +27,47 @@ def read_tsp_file(filename):
 
     return np.array(coords)
 
+
 class GeneticAlgorithmTSP:
-    def __init__(self, coords, pop_size=100, crossover_rate=0.9, mutation_rate=0.2, max_generations=2000):
+    def __init__(
+        self,
+        coords,
+        initial_solution,  # 新增参数，接收初始解
+        pop_size=100,
+        crossover_rate=0.9,
+        mutation_rate=0.2,
+        max_generations=2000,
+    ):
         self.coords = coords
         self.num_cities = len(coords)
         self.pop_size = pop_size
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
         self.max_generations = max_generations
+        self.initial_solution = initial_solution  # 保存初始解
 
     def calculate_distance(self, route):
         total = 0.0
         for i in range(len(route)):
-            total += np.linalg.norm(self.coords[route[i]] - self.coords[route[(i + 1) % len(route)]])
+            total += np.linalg.norm(
+                self.coords[route[i]] - self.coords[route[(i + 1) % len(route)]]
+            )
         return total
 
     def initial_population(self):
-        # 包含一个启发式解最近邻，其余为随机
+        # 所有个体都基于初始解生成（添加小扰动）
         population = []
-        population.append(generate_initial_solution_NN(self.coords))  # 更优起点
-        while len(population) < self.pop_size:
-            route = list(range(self.num_cities))
-            random.shuffle(route)
-            population.append(route)
+        base_route = self.initial_solution.copy()
+        population.append(base_route)  # 保留原始初始解
+
+        # 其余个体通过轻微扰动初始解生成
+        for _ in range(self.pop_size - 1):
+            new_route = base_route.copy()
+            # 执行1-3次随机交换（小扰动）
+            for _ in range(random.randint(1, 3)):
+                i, j = sorted(random.sample(range(self.num_cities), 2))
+                new_route[i], new_route[j] = new_route[j], new_route[i]
+            population.append(new_route)
         return population
 
     def selection(self, population, fitness):
@@ -61,7 +79,7 @@ class GeneticAlgorithmTSP:
             return parent1.copy()
         start, end = sorted(random.sample(range(self.num_cities), 2))
         child = [-1] * self.num_cities
-        child[start:end + 1] = parent1[start:end + 1]
+        child[start : end + 1] = parent1[start : end + 1]
         fill_pos = 0
         for city in parent2:
             if city not in child:
@@ -84,7 +102,11 @@ class GeneticAlgorithmTSP:
             improved = False
             for i in range(1, self.num_cities - 1):
                 for j in range(i + 1, min(i + 10, self.num_cities)):
-                    new_route = best_route[:i] + best_route[i:j + 1][::-1] + best_route[j + 1:]
+                    new_route = (
+                        best_route[:i]
+                        + best_route[i : j + 1][::-1]
+                        + best_route[j + 1 :]
+                    )
                     new_dist = self.calculate_distance(new_route)
                     if new_dist < best_dist:
                         best_route = new_route
@@ -97,9 +119,9 @@ class GeneticAlgorithmTSP:
 
     def solve(self):
         population = self.initial_population()
-        best_route = None
-        best_dist = float("inf")
-        history = []
+        best_route = self.initial_solution.copy()
+        best_dist = self.calculate_distance(best_route)
+        history = [best_dist]
 
         for gen in range(self.max_generations):
             fitness = np.array([1 / self.calculate_distance(r) for r in population])
@@ -494,6 +516,7 @@ def plot_route(coords, route, title="TSP Route", save_path="tsp_route.png"):
     plt.savefig(save_path, dpi=300)  # 提高DPI使文字更清晰
     plt.close()
 
+
 def calculate_route_distance(coords, route):
     """计算TSP路径的总距离"""
     route_coords = coords[np.array(route)]
@@ -501,11 +524,13 @@ def calculate_route_distance(coords, route):
     dy = np.diff(np.append(route_coords[:, 1], route_coords[0, 1]))
     return np.sum(np.sqrt(dx**2 + dy**2))
 
+
 def generate_initial_solution(coords):
     """生成随机初始解"""
     route = list(range(len(coords)))
     random.shuffle(route)
     return route
+
 
 def generate_initial_solution_NN(coords):
     """使用最近邻启发式生成初始解"""
@@ -546,6 +571,7 @@ def generate_initial_solution_NN(coords):
             best_route = route
 
     return best_route
+
 
 def plot_convergence(history, title="Convergence History", save_path="convergence.png"):
     """绘制收敛历史图并保存为文件"""
@@ -594,6 +620,9 @@ def main():
     filename = "eil51.tsp"
     coords = read_tsp_file(filename)
 
+    # 统一迭代次数
+    max_iter = 2500
+
     # 设置随机种子以保证可重复性
     seed = 262652  # 439.67
     random.seed(seed)
@@ -613,7 +642,7 @@ def main():
         coords,
         initial_solution,
         tabu_size=250,
-        max_iter=5000,
+        max_iter=max_iter,
         neighbor_size=300,
         diversification_freq=200,
         aspiration_ratio=1.02,
@@ -630,20 +659,30 @@ def main():
     print("\n=== 运行模拟退火算法 ===")
     sa_start = datetime.now()
     sa_tsp = SimulatedAnnealingTSP(
-        coords, initial_solution, initial_temp=1, cooling_rate=0.003, max_iter=5000, k_nearest=10
+        coords,
+        initial_solution,
+        initial_temp=1,
+        cooling_rate=0.003,
+        max_iter=max_iter,
+        k_nearest=10,
     )
     sa_route, sa_dist, sa_history = sa_tsp.solve()
     sa_end = datetime.now()
+
+    # 重置种子
+    random.seed(seed)
+    np.random.seed(seed)
 
     # 运行遗传算法
     print("\n=== 运行遗传算法 ===")
     ga_start = datetime.now()
     ga_solver = GeneticAlgorithmTSP(
         coords,
+        initial_solution,
         pop_size=100,
         crossover_rate=0.9,
         mutation_rate=0.2,
-        max_generations=2000,
+        max_generations=max_iter,
     )
     ga_route, ga_dist, ga_history = ga_solver.solve()
     ga_end = datetime.now()
@@ -687,9 +726,9 @@ def main():
 
     # 绘制收敛曲线对比
     plt.figure(figsize=(12, 6))
-    plt.plot(ts_history, "b-", label=f"Tabu Search (Final: {ts_dist:.2f})")
-    plt.plot(sa_history, "r-", label=f"Simulated Annealing (Final: {sa_dist:.2f})")
-    plt.plot(ga_history, "g-", label=f"Genetic Algorithm (Final: {ga_dist:.2f})")
+    plt.plot(np.array(ts_history), "b-", label=f"Tabu Search (Final: {ts_dist:.2f})")
+    plt.plot(np.array(sa_history), "r-", label=f"Simulated Annealing (Final: {sa_dist:.2f})")
+    plt.plot(np.array(ga_history), "g-", label=f"Genetic Algorithm (Final: {ga_dist:.2f})")
     plt.title("Algorithm Convergence Comparison")
     plt.xlabel("Iteration / Generation")
     plt.ylabel("Distance")
