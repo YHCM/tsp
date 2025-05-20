@@ -227,7 +227,10 @@ def main():
     initial_solution = generate_initial_solution(coords)
 
     k_nearest_dist = {}
+    neighbor_size_dist = {}
 
+
+    # k_nearest
     for k_nearest in range(10, 51, 5):
         print(f"运行禁忌搜索(k_nearest={k_nearest})...")
         k_nearest_dist[k_nearest] = 0
@@ -243,7 +246,7 @@ def main():
                 initial_solution,
                 tabu_size=250,
                 max_iter=5000,
-                neighbor_size=100,
+                neighbor_size=75,
                 diversification_freq=200,
                 aspiration_ratio=1.02,
                 k_nearest=k_nearest,
@@ -258,17 +261,60 @@ def main():
         print(
             f"禁忌搜索(k_nearest={k_nearest}) - 平均最佳距离: {k_nearest_dist[k_nearest]:.2f}"
         )
+    
+    # neighbor_size
+    for neighbor_size in range(30, 110, 10):
+        print(f"运行禁忌搜索(neighbor_size={neighbor_size})...")
+        neighbor_size_dist[neighbor_size] = 0
+        for seed in seeds:
+            # 重置种子
+            random.seed(seed)
+            np.random.seed(seed)
+
+            # 运行禁忌搜索
+            ts_start = datetime.now()
+            ts_tsp = TabuSearchTSP(
+                coords,
+                initial_solution,
+                tabu_size=250,
+                max_iter=5000,
+                neighbor_size=neighbor_size,
+                diversification_freq=200,
+                aspiration_ratio=1.02,
+                k_nearest=30,
+            )
+            ts_route, ts_dist, ts_history = ts_tsp.solve()
+            ts_end = datetime.now()
+            print(
+                f"禁忌搜索(neighbor_size={neighbor_size}) - 最佳距离: {ts_dist:.2f}, 耗时: {ts_end - ts_start}"
+            )
+            neighbor_size_dist[neighbor_size] += ts_dist
+        neighbor_size_dist[neighbor_size] /= len(seeds)
+        print(
+            f"禁忌搜索(aspiration_ratio={neighbor_size}) - 平均最佳距离: {neighbor_size_dist[neighbor_size]:.2f}"
+        )
 
     # 绘制收敛曲线对比
     # 邻近数量对比
     plt.figure(figsize=(12, 6))
     plt.plot(k_nearest_dist.keys(), k_nearest_dist.values(), "b-")
-    plt.title("Comparison")
+    plt.title("Relationship between k_nearest and best distance")
     plt.xlabel("k_nearist")
     plt.ylabel("Distance")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("output/parameter.png")
+    plt.savefig("output/parameter_k_nearist.png")
+    plt.close()
+
+    # 禁忌表大小
+    plt.figure(figsize=(12, 6))
+    plt.plot(neighbor_size_dist.keys(), neighbor_size_dist.values(), "b-")
+    plt.title("Relationship neighbor_size and best distance")
+    plt.xlabel("neighbor_size")
+    plt.ylabel("Distance")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("output/parameter_neighbor_size.png")
     plt.close()
 
     print("\n结果已保存到output目录")
